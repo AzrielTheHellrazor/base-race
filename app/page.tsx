@@ -25,6 +25,7 @@ interface GameState {
   wrongAnswers: number;
   maxWrongAnswers: number;
   foundPrimes: number[];
+  carProgress: number[]; // Progress for each car (0-10)
 }
 
 // Prime numbers
@@ -41,6 +42,7 @@ for (let i = 0; i < primes.length; i++) {
 // Phaser Game Scene
 class MathRaceScene extends Phaser.Scene {
   private cars: Phaser.GameObjects.Rectangle[] = [];
+  private carDetails: { body: Phaser.GameObjects.Rectangle; windows: Phaser.GameObjects.Rectangle[]; wheels: Phaser.GameObjects.Rectangle[]; lights: Phaser.GameObjects.Rectangle[] }[] = [];
   private lanes: Phaser.GameObjects.Rectangle[] = [];
   private finishLine!: Phaser.GameObjects.Rectangle;
   private gameState: GameState;
@@ -59,7 +61,8 @@ class MathRaceScene extends Phaser.Scene {
       gameRunning: true,
       wrongAnswers: 0,
       maxWrongAnswers: 5,
-      foundPrimes: []
+      foundPrimes: [],
+      carProgress: [0, 0, 0, 0] // Each car starts at progress 0
     };
     this.onStateChange = () => {};
     this.onFeedback = () => {};
@@ -70,62 +73,153 @@ class MathRaceScene extends Phaser.Scene {
     this.onFeedback = onFeedback;
   }
 
+  // Test function to advance cars
+  advanceCar(carIndex: number, steps: number) {
+    if (carIndex >= 0 && carIndex < this.gameState.carProgress.length) {
+      this.gameState.carProgress[carIndex] = Math.min(10, this.gameState.carProgress[carIndex] + steps);
+      this.updateCarPositions();
+      this.onStateChange(this.gameState);
+    }
+  }
+
+  // Update car positions based on progress with smooth transition
+  updateCarPositions() {
+    const laneWidth = this.scale.width / 4;
+    const laneHeight = this.scale.height * 0.6;
+    const laneStartY = this.scale.height * 0.2;
+    const laneEndY = laneStartY + laneHeight;
+    
+    this.carDetails.forEach((carDetail, index) => {
+      const laneX = index * laneWidth + (laneWidth / 2);
+      const progress = this.gameState.carProgress[index] / 10; // Progress from 0 to 1
+      const carY = laneEndY - 30 - (progress * (laneHeight - 60)); // Move from bottom to top
+      
+      // Update car body position with smooth transition
+      this.tweens.add({
+        targets: carDetail.body,
+        x: laneX,
+        y: carY,
+        duration: 500,
+        ease: 'Power2'
+      });
+      
+      // Update windows position
+      carDetail.windows.forEach((window, windowIndex) => {
+        const windowOffsetX = windowIndex === 0 ? -7 : 7;
+        this.tweens.add({
+          targets: window,
+          x: laneX + windowOffsetX,
+          y: carY - 2,
+          duration: 500,
+          ease: 'Power2'
+        });
+      });
+      
+      // Update wheels position
+      carDetail.wheels.forEach((wheel, wheelIndex) => {
+        const wheelOffsetX = wheelIndex === 0 ? -12 : 12;
+        this.tweens.add({
+          targets: wheel,
+          x: laneX + wheelOffsetX,
+          y: carY - 5,
+          duration: 500,
+          ease: 'Power2'
+        });
+      });
+      
+      // Update lights position
+      carDetail.lights.forEach((light, lightIndex) => {
+        const lightOffsetX = lightIndex === 0 ? -10 : 10;
+        this.tweens.add({
+          targets: light,
+          x: laneX + lightOffsetX,
+          y: carY + 6,
+          duration: 500,
+          ease: 'Power2'
+        });
+      });
+    });
+  }
+
   create() {
     const { width, height } = this.scale;
     
-    // Create background gradient
+    // Create green background
     this.add.graphics()
-      .fillGradientStyle(0x1e40af, 0x3b82f6, 0x1e40af, 0x3b82f6, 1)
+      .fillGradientStyle(0x059669, 0x10b981, 0x059669, 0x10b981, 1)
       .fillRect(0, 0, width, height);
 
-    // Create 4 lanes
+    // Create 4 separate lanes
     const laneWidth = width / 4;
-    const laneColors = [0x1f2937, 0x374151, 0x1f2937, 0x374151];
+    const laneHeight = height * 0.6;
+    const laneStartY = height * 0.2;
+    const laneEndY = laneStartY + laneHeight;
     
-    for (let i = 0; i < 4; i++) {
-      const lane = this.add.rectangle(
-        i * laneWidth + laneWidth / 2,
-        height / 2,
-        laneWidth,
-        height,
-        laneColors[i]
-      );
-      this.lanes.push(lane);
-
+    // Create 4 lanes side by side
+    for (let lane = 0; lane < 4; lane++) {
+      const laneX = lane * laneWidth;
+      const laneColor = lane % 2 === 0 ? 0x1f2937 : 0x374151;
+      
+      // Draw lane
+      this.add.graphics()
+        .fillStyle(laneColor)
+        .fillRect(laneX + 2, laneStartY, laneWidth - 4, laneHeight);
+      
       // Lane borders
-      this.add.rectangle(i * laneWidth, height / 2, 3, height, 0xfbbf24);
-      this.add.rectangle((i + 1) * laneWidth - 3, height / 2, 3, height, 0xfbbf24);
+      this.add.graphics()
+        .lineStyle(2, 0xfbbf24)
+        .strokeRect(laneX + 2, laneStartY, laneWidth - 4, laneHeight);
+    }
+    
+    // Finish line at the top
+    this.add.graphics()
+      .fillStyle(0xfbbf24)
+      .fillRect(0, laneStartY - 10, width, 10);
+    
+    // Add checkered pattern to finish line
+    const checkeredSize = 15;
+    for (let x = 0; x < width; x += checkeredSize * 2) {
+      this.add.graphics()
+        .fillStyle(0x000000)
+        .fillRect(x, laneStartY - 10, checkeredSize, 10);
     }
 
-    // Create finish line at bottom
-    this.finishLine = this.add.rectangle(
-      width / 2,
-      height - 25,
-      width,
-      15,
-      0xf59e0b
-    );
-
-    // Create cars
+    // Create cars side by side at the bottom
     const carColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b];
+    const carStartY = laneEndY - 30;
+    
     for (let i = 0; i < 4; i++) {
-      const car = this.add.rectangle(
-        i * laneWidth + laneWidth / 2,
-        100,
-        40,
-        20,
+      const carX = (i * laneWidth) + (laneWidth / 2);
+      const carY = carStartY;
+      
+      // Car body
+      const carBody = this.add.rectangle(
+        carX,
+        carY,
+        25,
+        12,
         carColors[i]
       );
       
-      // Add car details
-      this.add.rectangle(car.x - 10, car.y - 5, 8, 8, 0xe5e7eb); // Window 1
-      this.add.rectangle(car.x + 10, car.y - 5, 8, 8, 0xe5e7eb); // Window 2
+      // Car windows
+      const window1 = this.add.rectangle(carX - 7, carY - 2, 5, 5, 0xe5e7eb);
+      const window2 = this.add.rectangle(carX + 7, carY - 2, 5, 5, 0xe5e7eb);
       
-      // Add wheels
-      this.add.rectangle(car.x - 20, car.y - 8, 8, 10, 0x1f2937); // Wheel 1
-      this.add.rectangle(car.x + 20, car.y - 8, 8, 10, 0x1f2937); // Wheel 2
+      // Car wheels
+      const wheel1 = this.add.rectangle(carX - 12, carY - 5, 5, 6, 0x1f2937);
+      const wheel2 = this.add.rectangle(carX + 12, carY - 5, 5, 6, 0x1f2937);
       
-      this.cars.push(car);
+      // Car lights (headlights)
+      const light1 = this.add.rectangle(carX - 10, carY + 6, 3, 3, 0xffff00);
+      const light2 = this.add.rectangle(carX + 10, carY + 6, 3, 3, 0xffff00);
+      
+      this.cars.push(carBody);
+      this.carDetails.push({
+        body: carBody,
+        windows: [window1, window2],
+        wheels: [wheel1, wheel2],
+        lights: [light1, light2]
+      });
     }
 
     // Start game loop
@@ -152,81 +246,81 @@ class MathRaceScene extends Phaser.Scene {
     this.gameState.distance += this.gameState.speed * 2;
     this.gameState.score = Math.floor(this.gameState.distance);
 
-    // Move cars down
-    this.cars.forEach((car) => {
-      const newY = 100 + this.gameState.distance * 0.5;
-      car.setY(newY);
-
-      // Check if car reached finish line
-      if (newY >= this.scale.height - 50) {
-        this.gameState.gameRunning = false;
-      }
-    });
+    // Update car positions based on progress
+    this.updateCarPositions();
 
     this.onStateChange(this.gameState);
   }
 
   updateTimer() {
     if (!this.gameState.gameRunning) return;
-
-    this.gameState.timeLeft--;
     
-    if (this.gameState.timeLeft <= 0 || this.gameState.wrongAnswers >= this.gameState.maxWrongAnswers) {
+    this.gameState.timeLeft--;
+    if (this.gameState.timeLeft <= 0) {
       this.gameState.gameRunning = false;
     }
-
+    
     this.onStateChange(this.gameState);
   }
 
-  checkAnswer(selectedPrimes: number[]) {
-    if (selectedPrimes.length !== 2) return;
-    
-    const product = selectedPrimes[0] * selectedPrimes[1];
+  checkAnswer(prime1: number, prime2: number) {
+    const product = prime1 * prime2;
     
     if (product === this.gameState.target) {
-      // Correct answer
-      this.gameState.speed = Math.min(this.gameState.speed + 1, 5);
-      this.gameState.selectedPrimes = [];
-      this.gameState.foundPrimes = [...this.gameState.foundPrimes, ...selectedPrimes.filter(p => !this.gameState.foundPrimes.includes(p))];
-      this.onFeedback('Correct!', '#10B981');
-      if (farcade) farcade.hapticFeedback();
+      // Correct answer - determine difficulty and advance cars
+      const difficulty = this.getPuzzleDifficulty(prime1, prime2);
+      const steps = difficulty === 'easy' ? 1 : difficulty === 'medium' ? 2 : 3;
+      
+      // Advance all cars based on difficulty
+      for (let i = 0; i < 4; i++) {
+        this.advanceCar(i, steps);
+      }
+      
+      this.onFeedback('Correct!', '#10b981');
+      this.generateTarget();
     } else {
       // Wrong answer
-      this.gameState.speed = Math.max(this.gameState.speed - 0.5, 0);
       this.gameState.wrongAnswers++;
-      this.gameState.selectedPrimes = [];
-      this.onFeedback('Wrong!', '#EF4444');
-      if (farcade) farcade.hapticFeedback();
+      this.onFeedback('Wrong!', '#ef4444');
+      
+      if (this.gameState.wrongAnswers >= this.gameState.maxWrongAnswers) {
+        this.gameState.gameRunning = false;
+      }
     }
     
-    this.generateTarget();
     this.onStateChange(this.gameState);
   }
 
-  generateTarget() {
+  getPuzzleDifficulty(prime1: number, prime2: number): 'easy' | 'medium' | 'hard' {
+    const sum = prime1 + prime2;
+    if (sum <= 10) return 'easy';
+    if (sum <= 20) return 'medium';
+    return 'hard';
+  }
+
+  generateTarget(): number {
     const randomIndex = Math.floor(Math.random() * validProducts.length);
-    this.gameState.target = validProducts[randomIndex];
-    this.onStateChange(this.gameState);
+    return validProducts[randomIndex];
   }
 
   resetGame() {
     this.gameState = {
       score: 0,
       distance: 0,
-      speed: 0,
-      target: 6,
+      speed: 0.5,
+      target: this.generateTarget(),
       selectedPrimes: [],
       timeLeft: 60,
-      gameRunning: true,
       wrongAnswers: 0,
       maxWrongAnswers: 5,
-      foundPrimes: []
+      gameRunning: true,
+      foundPrimes: [],
+      carProgress: [0, 0, 0, 0] // Reset all car progress
     };
 
-    // Reset car positions
-    this.cars.forEach(car => car.setY(100));
+    // Reset car positions to bottom of their lanes
+    this.updateCarPositions();
     
-    this.generateTarget();
     this.onStateChange(this.gameState);
   }
 }
@@ -245,11 +339,21 @@ export default function MathRaceGame() {
     gameRunning: true,
     wrongAnswers: 0,
     maxWrongAnswers: 5,
-    foundPrimes: []
+    foundPrimes: [],
+    carProgress: [0, 0, 0, 0]
   });
 
   const [showGameOver, setShowGameOver] = useState(false);
   const [feedback, setFeedback] = useState({ text: '', color: '', show: false });
+
+  // Test function to advance cars
+  const testAdvanceCars = useCallback((steps: number) => {
+    if (sceneRef.current) {
+      for (let i = 0; i < 4; i++) {
+        sceneRef.current.advanceCar(i, steps);
+      }
+    }
+  }, []);
 
   // Initialize Phaser Game
   useEffect(() => {
@@ -257,18 +361,18 @@ export default function MathRaceGame() {
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      width: 400,
-      height: 800,
+      width: 300,
+      height: 600,
       parent: 'game-container',
       backgroundColor: '#1e40af',
       scene: MathRaceScene,
-             physics: {
-         default: 'arcade',
-         arcade: {
-           gravity: { x: 0, y: 0 },
-           debug: false
-         }
-       },
+      physics: {
+        default: 'arcade',
+        arcade: {
+          gravity: { x: 0, y: 0 },
+          debug: false
+        }
+      },
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
@@ -350,83 +454,78 @@ export default function MathRaceGame() {
         
         {/* UI Overlay */}
         <div className="absolute inset-0 pointer-events-none z-10">
-          {/* Top Bar */}
-          <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-black/80 to-transparent h-24">
-            {/* Score */}
-            <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm rounded-xl px-4 py-2 border border-slate-600">
-              <div className="text-slate-300 text-xs font-medium">DISTANCE</div>
-              <div className="text-white text-xl font-bold">{gameState.score}m</div>
-            </div>
-            
-            {/* Target */}
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl px-6 py-3 border border-orange-400 shadow-lg">
-              <div className="text-white text-xs font-medium text-center">TARGET</div>
-              <div className="text-white text-2xl font-bold text-center">{gameState.target}</div>
-            </div>
-            
-            {/* Time Left */}
-            <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-sm rounded-xl px-4 py-2 border border-slate-600">
-              <div className="text-slate-300 text-xs font-medium">TIME</div>
-              <div className={`text-xl font-bold ${gameState.timeLeft <= 10 ? 'text-red-400' : 'text-white'}`}>
-                {gameState.timeLeft}s
-              </div>
+
+
+          {/* Bottom Bar - Found Primes */}
+          <div className="absolute bottom-4 left-4 right-4">
+            <div className="flex justify-center space-x-2">
+              {[0, 1, 2, 3].map((index) => (
+                <div
+                  key={index}
+                  className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg border-2 border-blue-400 shadow-lg flex items-center justify-center"
+                >
+                  <span className="text-white font-bold text-lg">
+                    {gameState.foundPrimes[index] || '?'}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-          
-          {/* Found Primes Boxes - Top Left */}
-          <div className="absolute top-28 left-4 flex flex-col gap-3 pointer-events-auto">
-            <div className="text-white text-xs font-medium mb-1">FOUND PRIME NUMBERS</div>
-            {[0, 1, 2, 3].map((index) => (
-              <div
-                key={index}
-                className={`w-14 h-14 rounded-xl border-2 flex items-center justify-center text-white font-bold text-lg transition-all duration-300 shadow-lg ${
-                  gameState.foundPrimes[index] 
-                    ? 'bg-gradient-to-br from-green-500 to-green-600 border-green-400 shadow-green-500/25' 
-                    : 'bg-slate-800/80 border-slate-600 backdrop-blur-sm'
-                }`}
+
+          {/* Test Buttons */}
+          <div className="absolute bottom-20 left-4 right-4">
+            <div className="flex justify-center space-x-2">
+              <button
+                onClick={() => testAdvanceCars(1)}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg font-semibold shadow-lg hover:bg-green-600 transition-colors pointer-events-auto"
               >
-                {gameState.foundPrimes[index] || '?'}
-              </div>
-            ))}
+                Easy (+1)
+              </button>
+              <button
+                onClick={() => testAdvanceCars(2)}
+                className="px-4 py-2 bg-yellow-500 text-white rounded-lg font-semibold shadow-lg hover:bg-yellow-600 transition-colors pointer-events-auto"
+              >
+                Medium (+2)
+              </button>
+              <button
+                onClick={() => testAdvanceCars(3)}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg font-semibold shadow-lg hover:bg-red-600 transition-colors pointer-events-auto"
+              >
+                Hard (+3)
+              </button>
+            </div>
           </div>
-          
+
           {/* Feedback */}
           {feedback.show && (
-            <div 
-              className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white text-6xl font-bold drop-shadow-2xl transition-all duration-300 animate-pulse"
-              style={{ color: feedback.color }}
-            >
-              {feedback.text}
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+              <div
+                className={`px-6 py-3 rounded-lg text-white font-bold text-xl shadow-lg animate-pulse`}
+                style={{ backgroundColor: feedback.color }}
+              >
+                {feedback.text}
+              </div>
             </div>
           )}
         </div>
-        
+
         {/* Game Over Modal */}
         {showGameOver && (
-          <div className="absolute inset-0 bg-black/90 backdrop-blur-sm flex flex-col justify-center items-center z-20">
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-8 border border-slate-600 shadow-2xl max-w-sm w-full mx-4">
-              <h2 className="text-white text-3xl font-bold mb-6 text-center">Game Over!</h2>
-              
-              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-2xl p-4 mb-6 text-center">
-                <div className="text-slate-900 text-4xl font-bold">{gameState.score}m</div>
-                <div className="text-slate-800 text-sm font-medium">Total Distance</div>
-              </div>
-              
-              {gameState.foundPrimes.length > 0 && (
-                <div className="bg-slate-700/50 rounded-xl p-4 mb-6">
-                  <div className="text-slate-300 text-sm font-medium mb-2">Found Prime Numbers:</div>
-                  <div className="text-white text-lg font-semibold">
-                    {gameState.foundPrimes.join(', ')}
-                  </div>
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-20">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-8 border border-slate-600 shadow-2xl max-w-sm w-full mx-4">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-white mb-4">Game Complete!</h2>
+                <p className="text-slate-300 mb-6">Great Job!</p>
+                <div className="text-3xl font-bold text-green-400 mb-6">
+                  Score: {gameState.score}
                 </div>
-              )}
-              
-              <button
-                onClick={resetGame}
-                className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 border-none rounded-xl text-white text-lg font-bold py-4 px-8 cursor-pointer transition-all duration-200 shadow-lg hover:shadow-green-500/25 hover:-translate-y-1"
-              >
-                Play Again
-              </button>
+                <button
+                  onClick={resetGame}
+                  className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-6 rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg"
+                >
+                  Play Again
+                </button>
+              </div>
             </div>
           </div>
         )}
