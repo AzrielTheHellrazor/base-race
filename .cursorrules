@@ -1,0 +1,77 @@
+# Cursor Rules for Math Race Game
+
+## Project Overview
+A math-based racing game built with Next.js, React, TypeScript, and Phaser.js. Players solve prime number multiplication puzzles to accelerate their cars in a 4-lane racing environment.
+
+## Tech Stack
+- **Frontend**: Next.js 15, React 18, TypeScript
+- **Game Engine**: Phaser.js 3.90.0
+- **Styling**: Tailwind CSS
+- **Package Manager**: Bun
+- **Platform**: Farcade SDK integration
+
+## Key Features
+- 4-lane racing with individual cars
+- Prime number multiplication puzzles
+- Real-time game loop with 60 FPS
+- Responsive design for mobile devices
+- Farcade SDK integration for platform features
+
+## File Structure
+```
+app/
+├── page.tsx              # Main game component with Phaser.js
+├── layout.tsx            # Root layout
+├── globals.css           # Global styles
+└── components/           # React components
+
+lib/                      # Utility functions
+public/                   # Static assets
+```
+
+## Development Guidelines
+
+### Code Style
+- Use TypeScript for type safety
+- Follow React hooks best practices
+- Use Tailwind CSS for styling
+- Implement proper error handling
+
+### Game Development
+- Use Phaser.js Scene system for game logic
+- Maintain 60 FPS performance
+- Implement proper game state management
+- Use callbacks for React-Phaser communication
+
+### Performance
+- Optimize for mobile devices
+- Use Bun for faster package management
+- Implement proper cleanup in useEffect hooks
+- Minimize re-renders with useCallback
+
+## Commands
+```bash
+# Install dependencies
+bun install
+
+# Start development server
+bun dev
+
+# Build for production
+bun build
+
+# Run tests
+bun test
+```
+
+## Environment Variables
+```env
+# Add any environment variables here
+NEXT_PUBLIC_GAME_VERSION=1.0.0
+```
+
+## Notes
+- Game is optimized for portrait 9:16 aspect ratio
+- Backend integration ready for prime number selection
+- Farcade SDK simulation included for testing
+- All text is in English for international use
