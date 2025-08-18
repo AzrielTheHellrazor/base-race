@@ -326,7 +326,7 @@ function TodoList() {
         <div className="flex items-center space-x-2">
           <input
             type="text"
-            value={newTodo}
+            value={newTodo || ''}
             onChange={(e) => setNewTodo(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Add a new task..."

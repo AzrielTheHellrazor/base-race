@@ -1,24 +1,26 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as Phaser from "phaser";
+import { apiClient } from "@/lib/api-client";
+import { io } from "socket.io-client";
 
 // Game state
 interface GameState {
   score: number;
   distance: number;
   speed: number;
-  target: number;
-  selectedPrimes: number[];
   timeLeft: number;
   gameRunning: boolean;
-  wrongAnswers: number;
-  maxWrongAnswers: number;
-  foundPrimes: number[];
   carProgress: number[]; // Progress for each car (0-10)
 }
 
 // Prime numbers
 const primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
+
+// Props interface
+interface MathRaceGameProps {
+  raceId: string;
+}
 
 // Pre-computed valid prime products
 const validProducts: number[] = [];
@@ -37,6 +39,8 @@ class MathRaceScene extends Phaser.Scene {
   private gameState: GameState;
   private onStateChange: (state: GameState) => void;
   private onFeedback: (text: string, color: string) => void;
+  private onGameStarted: () => void;
+  private participants: Array<{address: string, position: number}> = [];
 
   constructor() {
     super({ key: 'MathRaceScene' });
@@ -44,35 +48,73 @@ class MathRaceScene extends Phaser.Scene {
       score: 0,
       distance: 0,
       speed: 0,
-      target: 6,
-      selectedPrimes: [],
       timeLeft: 60,
-      gameRunning: true,
-      wrongAnswers: 0,
-      maxWrongAnswers: 5,
-      foundPrimes: [],
+      gameRunning: false,
       carProgress: [0, 0, 0, 0] // Each car starts at progress 0
     };
     this.onStateChange = () => {};
     this.onFeedback = () => {};
+    this.onGameStarted = () => {};
   }
 
-  setCallbacks(onStateChange: (state: GameState) => void, onFeedback: (text: string, color: string) => void) {
+  setCallbacks(onStateChange: (state: GameState) => void, onFeedback: (text: string, color: string) => void, onGameStarted?: () => void) {
     this.onStateChange = onStateChange;
     this.onFeedback = onFeedback;
+    this.onGameStarted = onGameStarted || (() => {});
   }
 
-  // Test function to advance cars
-  advanceCar(carIndex: number, steps: number) {
+  setParticipants(participants: Array<{address: string, position: number}>) {
+    this.participants = participants;
+    // Initialize car progress array based on participants
+    this.gameState.carProgress = new Array(4).fill(0);
+    console.log('Participants set:', participants);
+    console.log('Car progress initialized:', this.gameState.carProgress);
+    // Update car positions based on participant order
+    this.updateCarPositions();
+  }
+
+  updateCarProgress(progress: number[]) {
+    console.log('updateCarProgress called with:', progress);
+    this.gameState.carProgress = progress;
+    console.log('Updated carProgress:', this.gameState.carProgress);
+    this.updateCarPositions();
+    this.onStateChange(this.gameState);
+  }
+
+  updateSingleCarProgress(carIndex: number, progress: number) {
     if (carIndex >= 0 && carIndex < this.gameState.carProgress.length) {
-      this.gameState.carProgress[carIndex] = Math.min(10, this.gameState.carProgress[carIndex] + steps);
+      this.gameState.carProgress[carIndex] = progress;
       this.updateCarPositions();
       this.onStateChange(this.gameState);
     }
   }
 
+
+
+  // Start the game
+  async startGame() {
+    try {
+      console.log('Starting game...');
+      this.gameState.gameRunning = true;
+      this.onStateChange(this.gameState);
+      this.onGameStarted(); // Notify that game has started
+      
+      console.log('Game started successfully');
+    } catch (error) {
+      console.error('Failed to start game:', error);
+      this.gameState.gameRunning = false;
+      this.onStateChange(this.gameState);
+      this.onFeedback('Failed to start game', '#ef4444');
+    }
+  }
+
+
+
+
+
   // Update car positions based on progress with smooth transition
   updateCarPositions() {
+    console.log('updateCarPositions called, carProgress:', this.gameState.carProgress);
     const laneWidth = this.scale.width / 4;
     const laneHeight = this.scale.height * 0.6;
     const laneStartY = this.scale.height * 0.2;
@@ -82,6 +124,7 @@ class MathRaceScene extends Phaser.Scene {
       const laneX = index * laneWidth + (laneWidth / 2);
       const progress = this.gameState.carProgress[index] / 10; // Progress from 0 to 1
       const carY = laneEndY - 30 - (progress * (laneHeight - 60)); // Move from bottom to top
+      console.log(`Car ${index}: progress=${this.gameState.carProgress[index]}, normalized=${progress}, targetY=${carY}`);
       
       // Update car body position with smooth transition
       this.tweens.add({
@@ -137,6 +180,9 @@ class MathRaceScene extends Phaser.Scene {
     this.add.graphics()
       .fillGradientStyle(0x059669, 0x10b981, 0x059669, 0x10b981, 1)
       .fillRect(0, 0, width, height);
+
+    // Start the game
+    this.startGame();
 
     // Create 4 separate lanes
     const laneWidth = width / 4;
@@ -229,15 +275,8 @@ class MathRaceScene extends Phaser.Scene {
   }
 
   updateGame() {
-    if (!this.gameState.gameRunning) return;
-
-    // Update distance based on speed
-    this.gameState.distance += this.gameState.speed * 2;
-    this.gameState.score = Math.floor(this.gameState.distance);
-
-    // Update car positions based on progress
-    this.updateCarPositions();
-
+    // WebSocket'ten gelen verilerle araba pozisyonları güncelleniyor
+    // Bu metod artık sadece UI güncellemesi yapıyor
     this.onStateChange(this.gameState);
   }
 
@@ -252,69 +291,27 @@ class MathRaceScene extends Phaser.Scene {
     this.onStateChange(this.gameState);
   }
 
-  checkAnswer(prime1: number, prime2: number) {
-    const product = prime1 * prime2;
-    
-    if (product === this.gameState.target) {
-      // Correct answer - determine difficulty and advance cars
-      const difficulty = this.getPuzzleDifficulty(prime1, prime2);
-      const steps = difficulty === 'easy' ? 1 : difficulty === 'medium' ? 2 : 3;
-      
-      // Advance all cars based on difficulty
-      for (let i = 0; i < 4; i++) {
-        this.advanceCar(i, steps);
-      }
-      
-      this.onFeedback('Correct!', '#10b981');
-      this.generateTarget();
-    } else {
-      // Wrong answer
-      this.gameState.wrongAnswers++;
-      this.onFeedback('Wrong!', '#ef4444');
-      
-      if (this.gameState.wrongAnswers >= this.gameState.maxWrongAnswers) {
-        this.gameState.gameRunning = false;
-      }
-    }
-    
-    this.onStateChange(this.gameState);
-  }
-
-  getPuzzleDifficulty(prime1: number, prime2: number): 'easy' | 'medium' | 'hard' {
-    const sum = prime1 + prime2;
-    if (sum <= 10) return 'easy';
-    if (sum <= 20) return 'medium';
-    return 'hard';
-  }
-
-  generateTarget(): number {
-    const randomIndex = Math.floor(Math.random() * validProducts.length);
-    return validProducts[randomIndex];
-  }
+  // Eski oyun mantığı kaldırıldı - artık backend'den geliyor
 
   resetGame() {
     this.gameState = {
       score: 0,
       distance: 0,
-      speed: 0.5,
-      target: this.generateTarget(),
-      selectedPrimes: [],
+      speed: 0,
       timeLeft: 60,
-      wrongAnswers: 0,
-      maxWrongAnswers: 5,
-      gameRunning: true,
-      foundPrimes: [],
+      gameRunning: false,
       carProgress: [0, 0, 0, 0] // Reset all car progress
     };
 
     // Reset car positions to bottom of their lanes
     this.updateCarPositions();
     
-    this.onStateChange(this.gameState);
+    // Start the game again
+    this.startGame();
   }
 }
 
-export default function MathRaceGame() {
+export default function MathRaceGame({ raceId }: MathRaceGameProps) {
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<MathRaceScene | null>(null);
   
@@ -322,27 +319,101 @@ export default function MathRaceGame() {
     score: 0,
     distance: 0,
     speed: 0,
-    target: 6,
-    selectedPrimes: [],
     timeLeft: 60,
-    gameRunning: true,
-    wrongAnswers: 0,
-    maxWrongAnswers: 5,
-    foundPrimes: [],
+    gameRunning: false,
     carProgress: [0, 0, 0, 0]
   });
 
   const [showGameOver, setShowGameOver] = useState(false);
   const [feedback, setFeedback] = useState({ text: '', color: '', show: false });
+  const [participants, setParticipants] = useState<Array<{address: string, position: number}>>([]);
+  const [hasGameStarted, setHasGameStarted] = useState(false);
 
-  // Test function to advance cars
-  const testAdvanceCars = useCallback((steps: number) => {
-    if (sceneRef.current) {
-      for (let i = 0; i < 4; i++) {
-        sceneRef.current.advanceCar(i, steps);
+
+
+  // Initialize WebSocket connection and get race participants
+  useEffect(() => {
+    const initializeRace = async () => {
+      try {
+
+
+        // Get race state to get participants
+        const raceState = await apiClient.getRaceState(raceId);
+        if (raceState && raceState.participants) {
+          // Sort participants by join order (first to join gets leftmost lane)
+          const sortedParticipants = raceState.participants
+            .map((p, index) => ({ address: p.address, position: index }))
+            .sort((a, b) => a.position - b.position);
+          setParticipants(sortedParticipants);
+        }
+
+        // Initialize WebSocket connection
+        const socket = io('http://localhost:3002', {
+          query: { raceId }
+        });
+
+        socket.on('connect', () => {
+          console.log('Connected to WebSocket server');
+          socket.emit('join-race', { raceId });
+        });
+
+        socket.on('race-positions-update', (data) => {
+          console.log('Race positions received:', data);
+          // Update car positions based on real-time data
+          if (data && data.positions && Array.isArray(data.positions) && sceneRef.current) {
+            const updatedProgress = data.positions.map((p: { position: number }) => 
+              Math.min(10, (p.position / 500) * 10) // RACE_LENGTH = 500 in backend
+            );
+            console.log('Updated progress:', updatedProgress);
+            sceneRef.current.updateCarProgress(updatedProgress);
+          }
+        });
+
+        socket.on('puzzle-solved', (data) => {
+          console.log('Puzzle solved:', data);
+          // Update specific car progress when puzzle is solved
+          if (data.participantAddress && sceneRef.current) {
+            const participantIndex = participants.findIndex(p => p.address === data.participantAddress);
+            if (participantIndex >= 0) {
+              const newProgress = Math.min(10, (data.newPosition / data.raceLength) * 10);
+              sceneRef.current.updateSingleCarProgress(participantIndex, newProgress);
+            }
+          }
+        });
+
+        // Periyodik olarak race state'i güncelle
+        const updateRaceState = async () => {
+          try {
+            const raceState = await apiClient.getRaceState(raceId);
+            if (raceState && raceState.participants && sceneRef.current) {
+              const updatedProgress = raceState.participants.map((p: { position: number }) => 
+                Math.min(10, (p.position / (raceState.progress.raceLength || 100)) * 10)
+              );
+              sceneRef.current.updateCarProgress(updatedProgress);
+            }
+          } catch (error) {
+            console.error('Failed to update race state:', error);
+          }
+        };
+
+        // Her 2 saniyede bir race state'i güncelle
+        const raceStateInterval = setInterval(updateRaceState, 2000);
+
+
+
+        return () => {
+          socket.disconnect();
+          if (raceStateInterval) {
+            clearInterval(raceStateInterval);
+          }
+        };
+      } catch (error) {
+        console.error('Failed to initialize race:', error);
       }
-    }
-  }, []);
+    };
+
+    initializeRace();
+  }, [raceId]);
 
   // Initialize Phaser Game
   useEffect(() => {
@@ -378,7 +449,14 @@ export default function MathRaceGame() {
         scene.setCallbacks(setGameState, (text, color) => {
           setFeedback({ text, color, show: true });
           setTimeout(() => setFeedback(prev => ({ ...prev, show: false })), 1000);
+        }, () => {
+          setHasGameStarted(true);
         });
+        
+        // Set participants in the scene
+        if (participants.length > 0) {
+          scene.setParticipants(participants);
+        }
       }
     });
 
@@ -388,14 +466,18 @@ export default function MathRaceGame() {
         gameRef.current = null;
       }
     };
-  }, []);
+  }, [participants]);
 
   // Check for game over
   useEffect(() => {
-    if (!gameState.gameRunning && !showGameOver) {
+    // Only show game over if game was running and then stopped
+    // Don't show game over immediately when component mounts
+    if (gameState.gameRunning === false && !showGameOver && hasGameStarted) {
       setShowGameOver(true);
     }
-  }, [gameState.gameRunning, showGameOver]);
+  }, [gameState.gameRunning, showGameOver, hasGameStarted]);
+
+
 
   // Reset game
   const resetGame = useCallback(() => {
@@ -413,46 +495,6 @@ export default function MathRaceGame() {
         
         {/* UI Overlay */}
         <div className="absolute inset-0 pointer-events-none z-10">
-          {/* Bottom Bar - Found Primes */}
-          <div className="absolute bottom-4 left-4 right-4">
-            <div className="flex justify-center space-x-2">
-              {[0, 1, 2, 3].map((index) => (
-                <div
-                  key={index}
-                  className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg border-2 border-blue-400 shadow-lg flex items-center justify-center"
-                >
-                  <span className="text-white font-bold text-lg">
-                    {gameState.foundPrimes[index] || '?'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Test Buttons */}
-          <div className="absolute bottom-20 left-4 right-4">
-            <div className="flex justify-center space-x-2">
-              <button
-                onClick={() => testAdvanceCars(1)}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg font-semibold shadow-lg hover:bg-green-600 transition-colors pointer-events-auto"
-              >
-                Easy (+1)
-              </button>
-              <button
-                onClick={() => testAdvanceCars(2)}
-                className="px-4 py-2 bg-yellow-500 text-white rounded-lg font-semibold shadow-lg hover:bg-yellow-600 transition-colors pointer-events-auto"
-              >
-                Medium (+2)
-              </button>
-              <button
-                onClick={() => testAdvanceCars(3)}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg font-semibold shadow-lg hover:bg-red-600 transition-colors pointer-events-auto"
-              >
-                Hard (+3)
-              </button>
-            </div>
-          </div>
-
           {/* Feedback */}
           {feedback.show && (
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
