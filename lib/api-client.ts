@@ -189,7 +189,7 @@ class ApiClient {
     name: string;
     version: string;
     description: string;
-    endpoints: Record<string, any>;
+    endpoints: Record<string, unknown>;
   }> {
     return this.request('/');
   }

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as Phaser from "phaser";
 import { apiClient } from "@/lib/api-client";
-import { io } from "socket.io-client";
+import { createWebSocketConnection } from "@/lib/websocket-client";
 
 // Game state
 interface GameState {
@@ -328,6 +328,11 @@ export default function MathRaceGame({ raceId }: MathRaceGameProps) {
   const [feedback, setFeedback] = useState({ text: '', color: '', show: false });
   const [participants, setParticipants] = useState<Array<{address: string, position: number}>>([]);
   const [hasGameStarted, setHasGameStarted] = useState(false);
+  const participantsRef = useRef<Array<{address: string, position: number}>>([]);
+
+  useEffect(() => {
+    participantsRef.current = participants;
+  }, [participants]);
 
 
 
@@ -348,16 +353,14 @@ export default function MathRaceGame({ raceId }: MathRaceGameProps) {
         }
 
         // Initialize WebSocket connection
-        const socket = io('http://localhost:3002', {
-          query: { raceId }
-        });
+        const socket = createWebSocketConnection(raceId);
 
         socket.on('connect', () => {
           console.log('Connected to WebSocket server');
           socket.emit('join-race', { raceId });
         });
 
-        socket.on('race-positions-update', (data) => {
+        socket.on('race-positions-update', (data: { positions?: Array<{ position: number }> }) => {
           console.log('Race positions received:', data);
           // Update car positions based on real-time data
           if (data && data.positions && Array.isArray(data.positions) && sceneRef.current) {
@@ -369,12 +372,12 @@ export default function MathRaceGame({ raceId }: MathRaceGameProps) {
           }
         });
 
-        socket.on('puzzle-solved', (data) => {
+        socket.on('puzzle-solved', (data: { participantAddress?: string; newPosition?: number; raceLength?: number }) => {
           console.log('Puzzle solved:', data);
           // Update specific car progress when puzzle is solved
           if (data.participantAddress && sceneRef.current) {
-            const participantIndex = participants.findIndex(p => p.address === data.participantAddress);
-            if (participantIndex >= 0) {
+            const participantIndex = participantsRef.current.findIndex(p => p.address === data.participantAddress);
+            if (participantIndex >= 0 && data.newPosition && data.raceLength) {
               const newProgress = Math.min(10, (data.newPosition / data.raceLength) * 10);
               sceneRef.current.updateSingleCarProgress(participantIndex, newProgress);
             }

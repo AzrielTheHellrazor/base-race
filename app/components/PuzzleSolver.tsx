@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiClient, Puzzle } from '@/lib/api-client';
 
 interface PuzzleSolverProps {
@@ -15,17 +15,17 @@ export default function PuzzleSolver({ raceId, onPuzzleSolved }: PuzzleSolverPro
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Bulmaca yükle
-  const loadPuzzle = async () => {
+  const loadPuzzle = useCallback(async () => {
     try {
       const puzzle = await apiClient.getCurrentPuzzle(raceId);
       setCurrentPuzzle(puzzle);
       setTimeLeft(puzzle.timeLimit);
       setUserAnswer('');
       setFeedback(null);
-    } catch (err) {
+    } catch {
       setFeedback({ message: 'Failed to load puzzle', type: 'error' });
     }
-  };
+  }, [raceId]);
 
   // Bulmaca çöz
   const submitAnswer = async () => {
@@ -56,7 +56,7 @@ export default function PuzzleSolver({ raceId, onPuzzleSolved }: PuzzleSolverPro
         loadPuzzle();
       }, 2000);
 
-    } catch (err) {
+    } catch {
       setFeedback({ message: 'Failed to submit answer', type: 'error' });
     } finally {
       setIsSubmitting(false);
@@ -88,12 +88,12 @@ export default function PuzzleSolver({ raceId, onPuzzleSolved }: PuzzleSolverPro
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, onPuzzleSolved]);
+  }, [timeLeft, onPuzzleSolved, loadPuzzle]);
 
   // İlk bulmaca yükle
   useEffect(() => {
     loadPuzzle();
-  }, [raceId]);
+  }, [loadPuzzle]);
 
   if (!currentPuzzle) {
     return (

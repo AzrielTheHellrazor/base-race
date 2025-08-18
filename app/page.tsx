@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import GameLobby from "./components/GameLobby";
 import RaceStatus from "./components/RaceStatus";
@@ -23,6 +23,25 @@ export default function Page() {
   const [currentRaceId, setCurrentRaceId] = useState<string | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>('lobby');
   const [isCreator, setIsCreator] = useState(false);
+
+  // Farcaster SDK ready çağrısı
+  useEffect(() => {
+    // Farcaster SDK'sının yüklenmesini bekle
+    const initFarcaster = async () => {
+      try {
+        // @ts-expect-error - Farcaster SDK global olarak yüklenir
+        if (typeof window !== 'undefined' && window.farcaster) {
+          // @ts-expect-error - Farcaster SDK global object
+          await window.farcaster.actions.ready();
+          console.log('Farcaster SDK ready called successfully');
+        }
+      } catch (error) {
+        console.log('Farcaster SDK not available or ready call failed:', error);
+      }
+    };
+
+    initFarcaster();
+  }, []);
 
   const handleStartGame = (raceId: string, isCreator: boolean = false) => {
     setCurrentRaceId(raceId);
@@ -65,7 +84,7 @@ export default function Page() {
               onClick={handleBackToLobby}
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
             >
-              ← Lobby'ye Dön
+              ← Lobby&apos;ye Dön
             </button>
           </div>
           
@@ -100,7 +119,7 @@ export default function Page() {
               onClick={handleBackToLobby}
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
             >
-              ← Lobby'ye Dön
+              ← Lobby&apos;ye Dön
             </button>
           </div>
           
@@ -128,7 +147,7 @@ export default function Page() {
           onClick={handleBackToLobby}
           className="absolute top-4 left-4 z-50 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors"
         >
-          ← Lobby'ye Dön
+          ← Lobby&apos;ye Dön
         </button>
         <MathRaceGame raceId={currentRaceId} />
       </div>

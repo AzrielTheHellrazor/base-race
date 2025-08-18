@@ -24,7 +24,7 @@ export default function GameLobby({ onStartGame }: GameLobbyProps) {
         if (!isConnected) {
           setError('Backend connection failed. Is the backend running?');
         }
-      } catch (err) {
+      } catch {
         setBackendStatus('disconnected');
         setError('Backend connection failed');
       }

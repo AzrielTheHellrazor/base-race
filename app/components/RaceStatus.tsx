@@ -25,7 +25,7 @@ export default function RaceStatus({ raceId, onStartRace, isCreator = false }: R
         setRaceState(state);
         setLeaderboard(board);
         setError('');
-      } catch (err) {
+      } catch {
         setError('Failed to update race status');
       }
     };
@@ -68,12 +68,12 @@ export default function RaceStatus({ raceId, onStartRace, isCreator = false }: R
     );
   }
 
-  // Normalize backend response shape differences
-  const raceStatusValue = (raceState.race as any).state ?? (raceState.race as any).status ?? 'waiting';
-  const participantsArray: any[] = (raceState as any).participants ?? (raceState.race as any).participants ?? [];
+  // Normalize backend response using typed shapes
+  const raceStatusValue = raceState.race.state ?? 'waiting';
+  const participantsArray = raceState.participants ?? [];
   const participantsCount = participantsArray.length;
-  const raceLength = (raceState.race as any).raceLength ?? ((raceState as any).progress && (raceState as any).progress.raceLength) ?? 0;
-  const raceCreator = (raceState.race as any).creator;
+  const raceLength = raceState.progress?.raceLength ?? 0;
+  const raceCreator = raceState.race.creator;
 
   return (
     <div className="bg-white/10 backdrop-blur-lg rounded-lg p-4 text-white">
@@ -111,7 +111,7 @@ export default function RaceStatus({ raceId, onStartRace, isCreator = false }: R
       <div className="mb-4">
         <h4 className="font-semibold mb-2">Participants</h4>
         <div className="space-y-2">
-          {participantsArray.map((participant: any, index: number) => (
+          {participantsArray.map((participant) => (
             <div key={participant.address} className="flex justify-between items-center bg-white/5 rounded p-2">
               <div className="flex items-center space-x-2">
                 <span className="text-sm font-mono">
@@ -126,7 +126,7 @@ export default function RaceStatus({ raceId, onStartRace, isCreator = false }: R
                   Pozisyon: {participant.position}/{raceLength}
                 </div>
                 <div className="text-xs text-gray-400">
-                  Hız: {typeof participant.speed === 'number' ? participant.speed.toFixed(1) : '-'} | Bulmaca: {participant.totalPuzzlesSolved ?? participant.puzzlesSolved ?? 0}
+                  Hız: {typeof participant.speed === 'number' ? participant.speed.toFixed(1) : '-'} | Bulmaca: {participant.totalPuzzlesSolved ?? 0}
                 </div>
               </div>
             </div>
@@ -151,10 +151,10 @@ export default function RaceStatus({ raceId, onStartRace, isCreator = false }: R
                 </div>
                 <div className="text-right">
                   <div className="text-sm">
-                    Position: {typeof (entry as any).position === 'number' ? (entry as any).position.toFixed(2) : '-'}
+                    Position: {typeof entry.position === 'number' ? entry.position.toFixed(2) : '-'}
                   </div>
                   <div className="text-xs text-gray-400">
-                    Puzzles: {(entry as any).totalPuzzlesSolved ?? (entry as any).puzzlesSolved ?? 0}
+                    Puzzles: {entry.totalPuzzlesSolved ?? 0}
                   </div>
                 </div>
               </div>
