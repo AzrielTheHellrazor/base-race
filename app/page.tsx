@@ -24,19 +24,19 @@ export default function Page() {
   const [gameMode, setGameMode] = useState<GameMode>('lobby');
   const [isCreator, setIsCreator] = useState(false);
 
-  // Farcaster SDK ready çağrısı
+  // Farcaster Mini App SDK ready çağrısı
   useEffect(() => {
-    // Farcaster SDK'sının yüklenmesini bekle
+    // Farcaster Mini App SDK'sının yüklenmesini bekle
     const initFarcaster = async () => {
       try {
-        // @ts-expect-error - Farcaster SDK global olarak yüklenir
-        if (typeof window !== 'undefined' && window.farcaster) {
-          // @ts-expect-error - Farcaster SDK global object
-          await window.farcaster.actions.ready();
-          console.log('Farcaster SDK ready called successfully');
+        // @ts-expect-error - Farcaster Mini App SDK global olarak yüklenir
+        if (typeof window !== 'undefined' && window.farcaster?.miniapp) {
+          // @ts-expect-error - Farcaster Mini App SDK global object
+          await window.farcaster.miniapp.ready();
+          console.log('Farcaster Mini App SDK ready called successfully');
         }
       } catch (error) {
-        console.log('Farcaster SDK not available or ready call failed:', error);
+        console.log('Farcaster Mini App SDK not available or ready call failed:', error);
       }
     };
 
